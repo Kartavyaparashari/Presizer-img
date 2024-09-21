@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera App</title>
+    <style>
+        :root {
+            --primary-color: #4CAF50;
+            --secondary-color: #45a049;
+            --background-color: #f0f0f0;
+            --text-color: #333;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+        #app-container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            max-width: 800px;
+            width: 100%;
+        }
+        #video-container, #photo-container {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+            margin: 0 auto 20px;
+        }
+        #video, #photo {
+            width: 100%;
+            border-radius: 5px;
+        }
+        #canvas {
+            display: none;
+        }
+        #controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: var(--secondary-color);
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        input, select {
+            padding: 5px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        #gallery {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+            justify-content: center;
+        }
+        #size-section {
+            display: none;
+            margin-top: 20px;
+            text-align: center;
+        }
+        #size-section input, #size-section select {
+            padding: 8px;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <h1>Camera App</h1>
+        <div id="video-container">
+            <video id="video" autoplay playsinline></video>
+        </div>
+        <div id="photo-container" style="display:none;">
+            <img id="photo" alt="Captured photo">
+        </div>
+        <canvas id="canvas"></canvas>
+
+        <div id="controls">
+            <button id="captureBtn">Capture</button>
+            <button id="switchCameraBtn">Switch Camera</button>
+        </div>
+
+        <div id="post-capture-controls" style="display: none;">
+            <button id="proceedBtn">&#10004; Proceed</button>
+            <button id="retakeBtn">Retake</button>
+        </div>
+
+        <div id="size-section">
+            <label for="sizeInput">Enter desired size:</label>
+            <input type="number" id="sizeInput" placeholder="Size" value="500">
+            <select id="sizeUnit">
+                <option value="KB">KB</option>
+                <option value="MB">MB</option>
+            </select>
+            <button id="convertDownloadBtn">Convert and Download</button>
+        </div>
+
+        <div id="gallery"></div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const photo = document.getElementById('photo');
+        const photoContainer = document.getElementById('photo-container');
+        const videoContainer = document.getElementById('video-container');
+        const canvas = document.getElementById('canvas');
+        const captureBtn = document.getElementById('captureBtn');
+        const switchCameraBtn = document.getElementById('switchCameraBtn');
+        const postCaptureControls = document.getElementById('post-capture-controls');
+        const proceedBtn = document.getElementById('proceedBtn');
+        const retakeBtn = document.getElementById('retakeBtn');
+        const sizeSection = document.getElementById('size-section');
+        const convertDownloadBtn = document.getElementById('convertDownloadBtn');
+        const sizeInput = document.getElementById('sizeInput');
+        const sizeUnit = document.getElementById('sizeUnit');
+
+        let stream;
+        let currentFacingMode = 'user'; // Start with front camera
+        let capturedImage;
+
+        // Start the camera
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } });
+                video.srcObject = stream;
+            } catch (err) {
+                console.error("Error accessing camera:", err);
+                alert("Error accessing camera. Please make sure you have given permission.");
+            }
+        }
+
+        // Switch camera between front and rear
+        function switchCamera() {
+            currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            startCamera();
+        }
+
+        function handleCapture() {
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            capturedImage = canvas.toDataURL('image/png');
+            photo.src = capturedImage;
+
+            videoContainer.style.display = 'none';
+            photoContainer.style.display = 'block';
+            postCaptureControls.style.display = 'block';
+            captureBtn.style.display = 'none';
+            switchCameraBtn.style.display = 'none';
+        }
+
+        function handleRetake() {
+            videoContainer.style.display = 'block';
+            photoContainer.style.display = 'none';
+            postCaptureControls.style.display = 'none';
+            captureBtn.style.display = 'block';
+            switchCameraBtn.style.display = 'block';
+            sizeSection.style.display = 'none';
+        }
+
+        function handleProceed() {
+            sizeSection.style.display = 'block';
+        }
+
+        function convertAndDownloadImage() {
+            const size = parseInt(sizeInput.value);
+            const unit = sizeUnit.value;
+
+            let convertedSize;
+            if (unit === 'KB') {
+                convertedSize = size * 1024; // Convert KB to bytes
+            } else if (unit === 'MB') {
+                convertedSize = size * 1024 * 1024; // Convert MB to bytes
+            }
+
+            // In this example, we won't resize by quality for simplicity.
+            // We can use libraries like canvas-resizer or specific JS compression to handle this.
+
+            const a = document.createElement('a');
+            a.href = capturedImage;
+            a.download = 'captured_image.png';
+            a.click();
+        }
+
+        // Event listeners
+        captureBtn.addEventListener('click', handleCapture);
+        switchCameraBtn.addEventListener('click', switchCamera);
+        retakeBtn.addEventListener('click', handleRetake);
+        proceedBtn.addEventListener('click', handleProceed);
+        convertDownloadBtn.addEventListener('click', convertAndDownloadImage);
+
+        // Start the camera on page load
+        startCamera();
+    </script>
+</body>
+</html>
